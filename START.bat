@@ -17,20 +17,15 @@ set "USB_ROOT=%~dp0"
 set "ENGINE_DIR=%USB_ROOT%engine"
 set "DATA_DIR=%USB_ROOT%data"
 set "ENV_FILE=%DATA_DIR%\ai_settings.env"
-set "NPM_CACHE_DIR=%DATA_DIR%\npm-cache"
-set "NPM_INSTALL_LOG=%ENGINE_DIR%\openclaude-engine-install.log"
-set "NODE_VERSION=22.14.0"
-set "NODE_DIR_NAME=node-win-x64"
-set "NODE_DIR=%ENGINE_DIR%\%NODE_DIR_NAME%"
-set "NODE_ARCHIVE=%ENGINE_DIR%\node.zip"
-set "NODE_DOWNLOAD_LOG=%ENGINE_DIR%\node-download.log"
-set "NODE_PRIMARY_URL=https://nodejs.org/dist/v%NODE_VERSION%/node-v%NODE_VERSION%-win-x64.zip"
-set "NODE_FALLBACK_URL=https://r2.nodejs.org/dist/v%NODE_VERSION%/node-v%NODE_VERSION%-win-x64.zip"
-set "GIT_VERSION=2.54.0"
-set "GIT_DIR_NAME=git-win-x64"
-set "GIT_DIR=%ENGINE_DIR%\%GIT_DIR_NAME%"
-set "GIT_BASH=%GIT_DIR%\bin\bash.exe"
-set "GIT_EXE=%GIT_DIR%\bin\git.exe"
+rem Cache is managed by Bun automatically via HOME/USERPROFILE redirection
+set "BUN_INSTALL_LOG=%ENGINE_DIR%\openclaude-engine-install.log"
+set "BUN_VERSION=1.3.14"
+set "BUN_DIR_NAME=bun-windows-x64"
+set "BUN_DIR=%ENGINE_DIR%\%BUN_DIR_NAME%"
+set "BUN_ARCHIVE=%ENGINE_DIR%\bun.zip"
+set "BUN_DOWNLOAD_LOG=%ENGINE_DIR%\bun-download.log"
+set "BUN_URL=https://github.com/oven-sh/bun/releases/download/bun-v%BUN_VERSION%/bun-windows-x64.zip"
+
 set "OPENCLAUDE_DIR=%ENGINE_DIR%\node_modules\@gitlawb\openclaude"
 set "OC_BIN=%OPENCLAUDE_DIR%\bin\openclaude"
 set "OC_CLI=%OPENCLAUDE_DIR%\dist\cli.mjs"
@@ -75,14 +70,13 @@ set "INSTALL_ACTION=%~1"
 if "%INSTALL_ACTION%"=="" set "INSTALL_ACTION=Installing"
 echo   !YELLOW![~] !INSTALL_ACTION! OpenClaude Engine...!RESET!
 echo   !DIM!    This can take several minutes on slower USB drives or networks.!RESET!
-echo   !DIM!    Log: %NPM_INSTALL_LOG%!RESET!
-echo   !DIM!    Tip: USB 2.0 drives can look idle while npm writes many small files.!RESET!
-if not exist "%NPM_CACHE_DIR%" mkdir "%NPM_CACHE_DIR%"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%USB_ROOT%tools\install-openclaude-engine.ps1" -EngineDir "%ENGINE_DIR%" -NpmCmd "%NODE_DIR%\npm.cmd" -CacheDir "%NPM_CACHE_DIR%" -LogFile "%NPM_INSTALL_LOG%"
-set "NPM_STATUS=!ERRORLEVEL!"
-if not "!NPM_STATUS!"=="0" (
-    echo   !RED![ERROR] OpenClaude Engine install failed ^(npm exit !NPM_STATUS!^).!RESET!
-    echo   !DIM!        Check log: %NPM_INSTALL_LOG%!RESET!
+echo   !DIM!    Log: %BUN_INSTALL_LOG%!RESET!
+echo   !DIM!    Tip: USB 2.0 drives can look idle while bun writes many small files.!RESET!
+powershell -NoProfile -ExecutionPolicy Bypass -File "%USB_ROOT%tools\install-openclaude-engine.ps1" -EngineDir "%ENGINE_DIR%" -BunCmd "%BUN_DIR%\bun.exe" -LogFile "%BUN_INSTALL_LOG%"
+set "BUN_STATUS=!ERRORLEVEL!"
+if not "!BUN_STATUS!"=="0" (
+    echo   !RED![ERROR] OpenClaude Engine install failed ^(bun exit !BUN_STATUS!^).!RESET!
+    echo   !DIM!        Check log: %BUN_INSTALL_LOG%!RESET!
     echo   !DIM!        If this only fails on USB, try a USB 3.x port/drive or copy the folder to internal storage for the first install, then copy it back.!RESET!
     pause
     exit /b 1
@@ -99,35 +93,30 @@ pause
 exit /b 1
 :after_install_engine_func
 
-:: 2. Check Node.js
-if not exist "%NODE_DIR%\node.exe" (
-    echo   !YELLOW![~] Node.js not found for Windows-x64. Downloading...!RESET!
-    echo   !DIM!    Version: v%NODE_VERSION%!RESET!
-    echo   !DIM!    Download log: %NODE_DOWNLOAD_LOG%!RESET!
-    if exist "%NODE_ARCHIVE%" del "%NODE_ARCHIVE%" >nul 2>&1
-    if exist "%NODE_DOWNLOAD_LOG%" del "%NODE_DOWNLOAD_LOG%" >nul 2>&1
-    call :download_node "%NODE_PRIMARY_URL%" "official Node.js CDN"
+:: 2. Check Bun
+if not exist "%BUN_DIR%\bun.exe" (
+    echo   !YELLOW![~] Bun not found for Windows-x64. Downloading...!RESET!
+    echo   !DIM!    Version: v%BUN_VERSION%!RESET!
+    echo   !DIM!    Download log: %BUN_DOWNLOAD_LOG%!RESET!
+    if exist "%BUN_ARCHIVE%" del "%BUN_ARCHIVE%" >nul 2>&1
+    if exist "%BUN_DOWNLOAD_LOG%" del "%BUN_DOWNLOAD_LOG%" >nul 2>&1
+    call :download_bun
+    if errorlevel 1 goto bun_download_failed
+    echo   !YELLOW![~] Extracting Bun...!RESET!
+    if exist "%BUN_DIR%" rmdir /s /q "%BUN_DIR%"
+    mkdir "%BUN_DIR%"
+    powershell -NoProfile -Command "Expand-Archive -Path '%BUN_ARCHIVE%' -DestinationPath '%BUN_DIR%' -Force"
     if errorlevel 1 (
-        echo   !YELLOW![WARN] Official Node.js download failed. Trying fallback mirror...!RESET!
-        call :download_node "%NODE_FALLBACK_URL%" "fallback Node.js mirror"
-    )
-    if errorlevel 1 goto node_download_failed
-    echo   !YELLOW![~] Extracting Node.js...!RESET!
-    echo   !DIM!    This can be silent for a few minutes on external drives.!RESET!
-    if exist "%NODE_DIR%" rmdir /s /q "%NODE_DIR%"
-    powershell -NoProfile -Command "Expand-Archive -Path '%NODE_ARCHIVE%' -DestinationPath '%ENGINE_DIR%' -Force"
-    if errorlevel 1 (
-        echo   !RED![ERROR] Failed to extract Node.js!!RESET!
-        del "%NODE_ARCHIVE%" >nul 2>&1
+        echo   !RED![ERROR] Failed to extract Bun!!RESET!
+        del "%BUN_ARCHIVE%" >nul 2>&1
         pause
         exit /b 1
     )
-    ren "%ENGINE_DIR%\node-v%NODE_VERSION%-win-x64" "%NODE_DIR_NAME%"
-    del "%NODE_ARCHIVE%"
-    echo   !GREEN![OK] Node.js installed to %NODE_DIR%!RESET!
+    del "%BUN_ARCHIVE%"
+    echo   !GREEN![OK] Bun installed to %BUN_DIR%!RESET!
 )
 
-set "PATH=%NODE_DIR%;%PATH%"
+set "PATH=%BUN_DIR%;%PATH%"
 
 if not exist "%OC_BIN%" goto repair_engine
 if not exist "%OC_CLI%" goto repair_engine
@@ -141,91 +130,43 @@ call :install_engine "Installing"
 if errorlevel 1 exit /b 1
 :engine_ready
 
-goto after_node_download_helpers
+goto after_bun_download_helpers
 
-:download_node
-set "NODE_URL=%~1"
-set "NODE_SOURCE=%~2"
-echo   !YELLOW![~] Downloading Node.js from !NODE_SOURCE!...!RESET!
-echo [%DATE% %TIME%] Trying !NODE_SOURCE!: !NODE_URL!>>"%NODE_DOWNLOAD_LOG%"
-curl.exe --fail --location --retry 3 --retry-delay 3 --connect-timeout 20 "!NODE_URL!" --output "%NODE_ARCHIVE%" >>"%NODE_DOWNLOAD_LOG%" 2>&1
+:download_bun
+echo   !YELLOW![~] Downloading Bun v%BUN_VERSION%...!RESET!
+echo [%DATE% %TIME%] Downloading: %BUN_URL%>>"%BUN_DOWNLOAD_LOG%"
+curl.exe --fail --location --retry 3 --retry-delay 3 --connect-timeout 20 "%BUN_URL%" --output "%BUN_ARCHIVE%" >>"%BUN_DOWNLOAD_LOG%" 2>&1
 if errorlevel 1 (
-    echo [%DATE% %TIME%] Failed: !NODE_SOURCE!>>"%NODE_DOWNLOAD_LOG%"
-    if exist "%NODE_ARCHIVE%" del "%NODE_ARCHIVE%" >nul 2>&1
+    echo [%DATE% %TIME%] Bun download failed>>"%BUN_DOWNLOAD_LOG%"
+    if exist "%BUN_ARCHIVE%" del "%BUN_ARCHIVE%" >nul 2>&1
     exit /b 1
 )
-if not exist "%NODE_ARCHIVE%" (
-    echo [%DATE% %TIME%] Download command finished but archive is missing.>>"%NODE_DOWNLOAD_LOG%"
+if not exist "%BUN_ARCHIVE%" (
+    echo [%DATE% %TIME%] Download finished but archive is missing>>"%BUN_DOWNLOAD_LOG%"
     exit /b 1
 )
-for %%A in ("%NODE_ARCHIVE%") do set "NODE_ARCHIVE_SIZE=%%~zA"
-if "!NODE_ARCHIVE_SIZE!"=="0" (
-    echo [%DATE% %TIME%] Downloaded archive is empty.>>"%NODE_DOWNLOAD_LOG%"
-    del "%NODE_ARCHIVE%" >nul 2>&1
+for %%A in ("%BUN_ARCHIVE%") do set "BUN_ARCHIVE_SIZE=%%~zA"
+if "!BUN_ARCHIVE_SIZE!"=="0" (
+    echo [%DATE% %TIME%] Downloaded archive is empty>>"%BUN_DOWNLOAD_LOG%"
+    del "%BUN_ARCHIVE%" >nul 2>&1
     exit /b 1
 )
-echo [%DATE% %TIME%] Downloaded !NODE_ARCHIVE_SIZE! bytes from !NODE_SOURCE!.>>"%NODE_DOWNLOAD_LOG%"
+echo [%DATE% %TIME%] Downloaded !BUN_ARCHIVE_SIZE! bytes>>"%BUN_DOWNLOAD_LOG%"
 exit /b 0
 
-:node_download_failed
+:bun_download_failed
 echo.
-echo   !RED![ERROR] Automatic Node.js download failed.!RESET!
+echo   !RED![ERROR] Automatic Bun download failed.!RESET!
 echo.
-echo   Please install Node.js manually:
-echo   !CYAN!https://nodejs.org/en/download!RESET!
+echo   Please download Bun manually from:
+echo   !CYAN!https://bun.sh!RESET!
 echo.
-echo   After installing Node.js, restart OpenClaude Portable.
-echo   Download log: !NODE_DOWNLOAD_LOG!
-echo.
-echo   Common causes: temporary CDN/network failure, antivirus blocking curl,
-echo   TLS/certificate issues, or a restricted corporate network.
+echo   After installing Bun, restart OpenClaude Portable.
+echo   Download log: !BUN_DOWNLOAD_LOG!
 pause
 exit /b 1
 
-:after_node_download_helpers
-
-:: 2.1 Check GitPortable
-if not exist "%GIT_BASH%" goto repair_git
-if not exist "%GIT_EXE%" goto repair_git
-goto git_ready
-:repair_git
-if exist "%GIT_DIR%" (
-    echo   !YELLOW![~] Incomplete GitPortable detected. Reinstalling...!RESET!
-    rmdir /s /q "%GIT_DIR%"
-)
-if not exist "%GIT_BASH%" (
-    echo   !YELLOW![~] GitPortable not found for Windows-x64. Downloading...!RESET!
-	curl.exe -L "https://github.com/git-for-windows/git/releases/download/v%GIT_VERSION%.windows.1/PortableGit-%GIT_VERSION%-64-bit.7z.exe" -o "%ENGINE_DIR%\GitPortable.exe"
-    if errorlevel 1 (
-        echo   !RED![ERROR] Failed to download GitPortable!!RESET!
-        pause
-        exit /b 1
-    )
-    echo   !YELLOW![~] Extracting GitPortable...!RESET!
-    echo   !DIM!    This can be silent for a few minutes on external drives.!RESET!
-    "%ENGINE_DIR%\GitPortable.exe" -o"%GIT_DIR%" -y
-    if errorlevel 1 (
-        echo   !RED![ERROR] Failed to extract GitPortable!!RESET!
-        del "%ENGINE_DIR%\GitPortable.exe" >nul 2>&1
-        pause
-        exit /b 1
-    )
-    del "%ENGINE_DIR%\GitPortable.exe"
-    if not exist "%GIT_BASH%" goto incomplete_git
-    if not exist "%GIT_EXE%" goto incomplete_git
-    echo   !GREEN![OK] GitPortable installed to %GIT_DIR%!RESET!
-)
-
-goto git_ready
-:incomplete_git
-echo   !RED![ERROR] GitPortable install is incomplete.!RESET!
-echo   !DIM!        Missing expected files under %GIT_DIR%\bin!RESET!
-pause
-exit /b 1
-:git_ready
-set "CLAUDE_CODE_GIT_BASH_PATH=%GIT_BASH%"
-set "GIT_BASH=%GIT_BASH%"
-set "PATH=%GIT_DIR%\cmd;%GIT_DIR%\bin;%GIT_DIR%\usr\bin;%PATH%"
+:after_bun_download_helpers
 
 :: 3. Check for flags (--offline, --quick)
 set "SKIP_UPDATE=0"
@@ -237,34 +178,6 @@ for %%A in (%*) do (
 
 if !SKIP_UPDATE!==1 (
     echo   !DIM![~] Offline mode - skipping update check!RESET!
-) else (
-    :: Only check for updates once per day using a timestamp file
-    set "UPDATE_STAMP=%DATA_DIR%\last_update_check.txt"
-    set "TODAY_DATE="
-    for /f "tokens=*" %%D in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd"') do set "TODAY_DATE=%%D"
-
-    set "LAST_CHECK="
-    if exist "!UPDATE_STAMP!" (
-        set /p "LAST_CHECK="<"!UPDATE_STAMP!"
-    )
-
-    if "!LAST_CHECK!"=="!TODAY_DATE!" (
-        echo   !DIM![~] Update check already done today - skipping!RESET!
-    ) else (
-        echo   !YELLOW![~] Checking for engine updates...!RESET!
-        pushd "%ENGINE_DIR%"
-        call npm.cmd outdated @gitlawb/openclaude >nul 2>&1
-        if errorlevel 1 (
-            echo   !YELLOW![~] New version detected! Upgrading...!RESET!
-            call :install_engine "Upgrading"
-            if errorlevel 1 exit /b 1
-            echo   !GREEN![OK] Engine upgraded to latest version!!RESET!
-        ) else (
-            echo   !GREEN![OK] Engine is up to date!!RESET!
-        )
-        popd
-        echo !TODAY_DATE!>"!UPDATE_STAMP!"
-    )
 )
 echo.
 
@@ -921,23 +834,22 @@ if !QUICK_MODE!==1 (
     goto launch_limitless
 )
 echo   !BOLD!Select Action:!RESET!
-echo   🚀 !CYAN!1)!RESET! !GREEN!Launch AI!RESET!       !DIM!- Normal Mode (Auto-starts in 10s)!RESET!
-echo   ⚡ !CYAN!2)!RESET! !RED!Limitless Mode!RESET!  !DIM!- Auto-executes everything (Advanced)!RESET!
+echo   🚀 !CYAN!1)!RESET! !GREEN!OpenClaude!RESET!    !DIM!- AI coding agent (Normal / Limitless)!RESET!
+echo   🔧 !CYAN!2)!RESET! !BOLD!Kilo CLI!RESET!        !DIM!- AI coding agent!RESET!
 echo   !DIM!─────────────────────────────────────────────────────────!RESET!
-echo   📊 !CYAN!3)!RESET! !BOLD!Open Dashboard!RESET!  !DIM!- View your chats visually!RESET!
-echo   ⚙️  !CYAN!4)!RESET! !BOLD!Change Provider!RESET! !DIM!- Switch your AI provider or API Key!RESET!
-echo   💾 !CYAN!5)!RESET! !BOLD!Setup Offline!RESET!   !DIM!- Download local AI models (Ollama)!RESET!
+echo   📊 !CYAN!3)!RESET! !BOLD!Open Dashboard!RESET!  !DIM!- Web UI at http://localhost:3000!RESET!
+echo   ⚙️  !CYAN!4)!RESET! !BOLD!Change Provider!RESET! !DIM!- Switch AI provider or API Key!RESET!
 echo.
 echo   !DIM!  Auto-launching in 10 seconds... press a key to choose.!RESET!
 echo.
-set /p "=  Select action (1-5): " <nul
-choice /c 12345 /n /t 10 /d 1
+set /p "=  Select action (1-4): " <nul
+choice /c 1234 /n /t 10 /d 1
 set "LAUNCH_MODE=!ERRORLEVEL!"
 :menu_done
 echo.
 
-if "!LAUNCH_MODE!"=="1" goto launch_normal
-if "!LAUNCH_MODE!"=="2" goto launch_limitless
+if "!LAUNCH_MODE!"=="1" goto launch_openclaude
+if "!LAUNCH_MODE!"=="2" goto launch_kilo
 if "!LAUNCH_MODE!"=="3" (
     echo.
     call "%USB_ROOT%tools\Open_Dashboard.bat"
@@ -948,24 +860,79 @@ if "!LAUNCH_MODE!"=="4" (
     call "%USB_ROOT%tools\Change_Provider.bat"
     exit /b
 )
-if "!LAUNCH_MODE!"=="5" (
-    echo.
-    call "%USB_ROOT%tools\Setup_Local_Models.bat"
-    exit /b
-)
 echo   !RED![ERROR] Invalid selection.!RESET!
 echo.
 goto prompt_launch_mode
 
-:launch_limitless
+:launch_kilo
 echo.
-echo   !RED!!BOLD![!] LIMITLESS MODE ACTIVATED!RESET!
-set "CMD_ARGS=--dangerously-skip-permissions"
-goto do_launch
+pushd "%ENGINE_DIR%"
+if not exist "node_modules\@kilocode\cli" (
+    echo   !YELLOW![~] Installing Kilo CLI via bun...!RESET!
+    "%BUN_DIR%\bun.exe" install @kilocode/cli
+    if errorlevel 1 (
+        echo   !RED![ERROR] Kilo CLI install failed.!RESET!
+        popd
+        pause
+        goto prompt_launch_mode
+    )
+    echo   !GREEN![OK] Kilo CLI installed!RESET!
+) else (
+    echo.
+    echo   !GREEN![OK] Kilo CLI already installed.!RESET!
+    echo   !CYAN!1^)!RESET! Launch
+    echo   !CYAN!2^)!RESET! Update
+    choice /c 12 /n /t 10 /d 1
+    if errorlevel 2 (
+        echo   !YELLOW![~] Updating Kilo CLI...!RESET!
+        "%BUN_DIR%\bun.exe" install @kilocode/cli
+        if errorlevel 1 (
+            echo   !RED![ERROR] Kilo CLI update failed.!RESET!
+            popd
+            pause
+            goto prompt_launch_mode
+        )
+        echo   !GREEN![OK] Kilo CLI updated!RESET!
+    )
+)
+set "XDG_CONFIG_HOME=%DATA_DIR%\config"
+"%BUN_DIR%\bun.exe" x kilo
+popd
+exit /b
 
-:launch_normal
+:launch_openclaude
 echo.
-echo   !GREEN![OK] Normal mode selected.!RESET!
+echo   !GREEN![OK] OpenClaude selected.!RESET!
+if not exist "%OC_BIN%" (
+    echo   !YELLOW![~] OpenClaude Engine not found. Installing...!RESET!
+    call :install_engine "Installing"
+    if errorlevel 1 (
+        pause
+        goto prompt_launch_mode
+    )
+) else (
+    echo.
+    echo   !CYAN!1^)!RESET! Normal Mode
+    echo   !CYAN!2^)!RESET! Limitless Mode
+    echo   !CYAN!3^)!RESET! Update Engine
+    choice /c 123 /n /t 15 /d 1
+    set "OC_ACTION=!ERRORLEVEL!"
+    if "!OC_ACTION!"=="3" (
+        echo   !YELLOW![~] Updating OpenClaude Engine...!RESET!
+        call :install_engine "Updating"
+        if errorlevel 1 (
+            pause
+            goto prompt_launch_mode
+        )
+        echo   !GREEN![OK] Engine updated!RESET!
+    )
+    if "!OC_ACTION!"=="2" (
+        set "CMD_ARGS=--dangerously-skip-permissions"
+        goto do_launch
+    )
+    set "CMD_ARGS="
+    goto do_launch
+)
 set "CMD_ARGS="
 goto do_launch
 
@@ -978,18 +945,6 @@ set "OLLAMA_MODELS=%DATA_DIR%\ollama\data"
 start "Ollama Portable" /B /MIN "%DATA_DIR%\ollama\ollama.exe" serve >nul 2>&1
 timeout /t 3 /nobreak >nul
 echo   !GREEN![OK] Ollama running!RESET!
-
-if not exist "%USB_ROOT%tools\local-proxy.js" goto skip_proxy_start
-echo   !CYAN![~] Starting local speed proxy (trims system prompt)...!RESET!
-REM Surgical kill: find any node process running local-proxy.js and kill it
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter 'Name = ''node.exe''' | Where-Object { $_.CommandLine -like '*local-proxy.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1
-start "LocalProxy" /B /MIN "%NODE_DIR%\node.exe" "%USB_ROOT%tools\local-proxy.js"
-timeout /t 2 /nobreak >nul
-set "OPENAI_BASE_URL=http://localhost:11435/v1"
-echo   !GREEN![OK] Speed proxy active - system prompt trimming enabled!RESET!
-
-:skip_proxy_start
-echo.
 
 :skip_ollama_start
 
@@ -1015,7 +970,7 @@ if exist "%OC_BIN%" goto use_oc_bin
 echo   !RED![ERROR] OpenClaude Engine is missing. Restart START.bat to repair the install.!RESET!
 goto engine_done
 :use_oc_bin
-call "%NODE_DIR%\node.exe" "%OC_BIN%" !SETTINGS_ARGS! !PROVIDER_ARGS! !MODEL_ARGS! !CMD_ARGS!
+call "%BUN_DIR%\bun.exe" "%OC_BIN%" !SETTINGS_ARGS! !PROVIDER_ARGS! !MODEL_ARGS! !CMD_ARGS!
 :engine_done
 popd
 
@@ -1024,7 +979,6 @@ if not exist "%DATA_DIR%\ollama\ollama.exe" goto skip_ollama_stop
 echo.
 echo   !CYAN![~] Stopping Local Ollama Server...!RESET!
 taskkill /F /IM ollama.exe >nul 2>&1
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter 'Name = ''node.exe''' | Where-Object { $_.CommandLine -like '*local-proxy.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1
 :skip_ollama_stop
 
-pause
+goto :eof

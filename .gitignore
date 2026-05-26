@@ -7,6 +7,10 @@
 # ── Personal data (API keys, chats, logs) ─────────────────────────
 /data/
 
+# ── Bun cache ────────────────────────────────────────────────────
+# Data dir has bun-cache/ which is already covered by /data/
+# but any npm-prefix/node_modules collateral is gitignored via /engine/
+
 # ── macOS junk ────────────────────────────────────────────────────
 .DS_Store
 

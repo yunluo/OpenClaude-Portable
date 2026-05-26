@@ -14,7 +14,7 @@ set "BOLD=%ESC%[1m"
 
 set "USB_ROOT=%~dp0..\"
 set "ENGINE_DIR=%USB_ROOT%engine"
-set "NODE=%ENGINE_DIR%\node-win-x64\node.exe"
+set "BUN=%ENGINE_DIR%\bun-windows-x64\bun.exe"
 set "DASHBOARD=%USB_ROOT%dashboard\server.mjs"
 set "DATA_DIR=%USB_ROOT%data"
 
@@ -32,8 +32,8 @@ echo   %BOLD%Portable AI USB - Configuration Dashboard%R%
 echo %CYAN%=========================================================%R%
 echo.
 
-:: Check Node.js
-if not exist "%NODE%" goto err_nonode
+:: Check Bun
+if not exist "%BUN%" goto err_nobun
 
 :: Check dashboard file
 if not exist "%DASHBOARD%" goto err_nodash
@@ -56,15 +56,15 @@ echo   %GREEN%[OK] Browser opened!%R%
 echo   %DIM%Press Ctrl+C to stop the dashboard.%R%
 echo.
 
-"%NODE%" "%DASHBOARD%"
+"%BUN%" "%DASHBOARD%"
 pause
 goto :eof
 
 :: ---------------------------------------------------------
 ::   ERROR HANDLERS
 :: ---------------------------------------------------------
-:err_nonode
-echo   %RED%[ERROR] Node.js not found.%R%
+:err_nobun
+echo   %RED%[ERROR] Bun not found.%R%
 echo   %YELLOW%Please run START.bat first.%R%
 echo.
 pause
